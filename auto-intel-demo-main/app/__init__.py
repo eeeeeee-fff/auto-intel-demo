@@ -1,1 +1,0 @@
-"""Auto intel demo package."""
