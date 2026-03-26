@@ -1,0 +1,848 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>情报池 · YAPP AUTO INTEL</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700;800&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg:           #0a0f1e;
+      --surface:      rgba(18, 28, 52, 0.94);
+      --surface-2:    rgba(24, 38, 68, 0.88);
+      --surface-3:    rgba(32, 52, 92, 0.65);
+      --line:         rgba(82, 128, 198, 0.20);
+      --line-strong:  rgba(82, 128, 198, 0.38);
+      --ink:          #e8f0ff;
+      --ink-2:        #b8d0f0;
+      --muted:        #6b8fb8;
+      --brand:        #3a7bd5;
+      --brand-deep:   #1a2f5c;
+      --brand-vivid:  #5a94f0;
+      --brand-soft:   rgba(58, 123, 213, 0.14);
+      --ok:           #2ecc71;
+      --ok-soft:      rgba(46, 204, 113, 0.14);
+      --warn:         #f39c12;
+      --warn-soft:    rgba(243, 156, 18, 0.14);
+      --bad:          #e74c3c;
+      --bad-soft:     rgba(231, 76, 60, 0.14);
+      --shadow:       0 12px 40px rgba(2, 6, 18, 0.65);
+      --shadow-sm:    0 4px 16px rgba(2, 6, 18, 0.48);
+      --radius:       10px;
+      --radius-sm:    6px;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { height: 100%; scrollbar-gutter: stable; }
+    body {
+      min-height: 100%;
+      font-family: "Noto Sans SC", "Space Grotesk", system-ui, sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(ellipse at 22% 0%, rgba(36, 64, 118, 0.55) 0%, transparent 45%),
+        radial-gradient(ellipse at 88% 88%, rgba(8, 52, 118, 0.28) 0%, transparent 42%),
+        linear-gradient(162deg, #090e1a 0%, #0f1a33 52%, #0a1528 100%);
+      background-attachment: fixed;
+    }
+    body::before {
+      content: ""; position: fixed; inset: 0;
+      pointer-events: none; z-index: 0;
+      background-image:
+        linear-gradient(rgba(72, 122, 198, 0.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(72, 122, 198, 0.04) 1px, transparent 1px);
+      background-size: 38px 38px;
+      mask-image: linear-gradient(180deg, rgba(0,0,0,.42), transparent 68%);
+    }
+
+    /* ── Page layout ── */
+    .page {
+      position: relative; z-index: 1;
+      max-width: 1640px; margin: 0 auto;
+      padding: calc(50px + 12px) 14px 0;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      min-height: 100vh;
+    }
+
+    /* Filter bar placeholder - prevents layout shift */
+    .filter-bar-placeholder {
+      height: 62px;
+      flex-shrink: 0;
+      visibility: hidden;
+      pointer-events: none;
+    }
+
+    /* ── Shared panel ── */
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      backdrop-filter: blur(22px); -webkit-backdrop-filter: blur(22px);
+      box-shadow: var(--shadow);
+    }
+
+    /* ── NAV ── */
+    .nav {
+      position: fixed;
+      top: 12px;
+      left: 0;
+      right: 0;
+      height: 50px;
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      align-items: center;
+      padding: 0 16px 0 14px;
+      background: var(--surface);
+      border: 1px solid var(--line-strong);
+      border-radius: var(--radius);
+      backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px);
+      box-shadow: var(--shadow-sm);
+      z-index: 1000;
+      max-width: 1640px;
+      margin: 0 auto;
+    }
+    .brand { display: flex; align-items: center; gap: 11px; }
+    .brand-mark {
+      width: 34px; height: 34px; background: var(--brand-deep);
+      border: 1px solid rgba(107,160,245,.32); border-radius: 7px;
+      display: flex; align-items: center; justify-content: center;
+      gap: 2px; flex-shrink: 0; overflow: hidden;
+    }
+    .brand-mark-y { font-family: "Space Grotesk", sans-serif; font-size: 13px; font-weight: 800; color: #fff; line-height: 1; letter-spacing: -0.03em; }
+    .brand-mark-arrow { width: 0; height: 0; border-style: solid; border-width: 4px 0 4px 7px; border-color: transparent transparent transparent rgba(255,255,255,0.65); flex-shrink: 0; }
+    .brand-text { line-height: 1.25; }
+    .brand-name { font-family: "Space Grotesk", sans-serif; font-size: 13px; font-weight: 700; color: var(--ink); letter-spacing: .03em; }
+    .brand-sub  { font-size: 10px; color: var(--muted); letter-spacing: .05em; }
+    .nav-links { display: flex; gap: 2px; justify-self: center; }
+    .nav-links a {
+      font-family: "Noto Sans SC", "Space Grotesk", sans-serif; font-size: 13px; font-weight: 600;
+      text-decoration: none; color: var(--muted); padding: 6px 14px;
+      border-radius: var(--radius-sm); letter-spacing: .02em; transition: all .18s ease;
+      border: 1px solid transparent;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 100px;
+      box-sizing: border-box;
+    }
+    .nav-links a:hover { color: var(--ink); background: var(--surface-3); }
+    .nav-links a:active { opacity: 0.7; }
+    .nav-links a.active { color: var(--brand-vivid); background: var(--brand-soft); border: 1px solid rgba(107,160,245,.22); }
+
+    /* ── STATS BAR ── */
+    .stats-bar {
+      display: flex; align-items: center; gap: 0;
+      background: var(--surface); border: 1px solid var(--line);
+      border-radius: var(--radius-sm); backdrop-filter: blur(18px); overflow: hidden;
+      padding: 0 2px;
+    }
+    .sb-item {
+      display: flex; align-items: center; gap: 7px; padding: 0 18px; height: 100%;
+      border-right: 1px solid var(--line); flex-shrink: 0;
+    }
+    .sb-item:first-child { flex: 1; padding-left: 14px; }
+    .sb-item:last-child  { border-right: none; }
+    .sb-label { font-family: "JetBrains Mono", monospace; font-size: 10px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .09em; }
+    .sb-val   { font-family: "JetBrains Mono", monospace; font-size: 14px; font-weight: 700; color: var(--brand-vivid); }
+    .sb-desc  { font-size: 11px; color: var(--muted); }
+    .sb-val.ok { color: var(--ok); }
+
+    /* ── FILTER BAR ── */
+    .filter-bar {
+      background: var(--surface); border: 1px solid var(--line);
+      border-radius: var(--radius-sm); backdrop-filter: blur(18px);
+      padding: 11px 16px; overflow: visible;
+    }
+    .filter-inner { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; }
+    .f-group { display: flex; flex-direction: column; gap: 4px; }
+    .f-label { font-family: "Space Grotesk", sans-serif; font-size: 10px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; color: var(--muted); }
+    .f-select, .f-input {
+      background: var(--surface-2); border: 1px solid var(--line-strong);
+      border-radius: 7px; padding: 6px 10px;
+      font-family: "Noto Sans SC", sans-serif; font-size: 12px; color: var(--ink);
+      outline: none; cursor: pointer; min-width: 110px; transition: border-color .18s;
+      appearance: none; -webkit-appearance: none;
+    }
+    .f-select:hover, .f-input:hover { border-color: var(--brand); }
+    .f-select:focus, .f-input:focus { border-color: var(--brand-vivid); box-shadow: 0 0 0 3px rgba(107,160,245,.15); }
+    .f-select option { background: #141f3d; color: var(--ink); }
+    .f-input { min-width: 130px; }
+    .f-checks { display: flex; gap: 14px; align-items: center; padding-bottom: 1px; }
+    .f-check { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ink-2); cursor: pointer; }
+    .f-check input[type=checkbox] { accent-color: var(--brand-vivid); width: 13px; height: 13px; cursor: pointer; }
+    .btn-primary {
+      background: linear-gradient(135deg, var(--brand), var(--brand-deep));
+      border: none; border-radius: 7px; padding: 7px 18px;
+      font-family: "Space Grotesk", sans-serif; font-size: 12px; font-weight: 700;
+      color: #fff; cursor: pointer; letter-spacing: .03em;
+      box-shadow: 0 4px 14px rgba(30,60,120,.40); transition: all .18s;
+    }
+    .btn-primary:hover { background: linear-gradient(135deg, var(--brand-vivid), var(--brand)); }
+    .btn-ghost {
+      background: var(--surface-2); border: 1px solid var(--line-strong); border-radius: 7px;
+      padding: 7px 14px; font-family: "Space Grotesk", sans-serif; font-size: 12px;
+      font-weight: 600; color: var(--muted); cursor: pointer; transition: all .18s;
+      text-decoration: none; display: inline-flex; align-items: center;
+    }
+    .btn-ghost:hover { color: var(--ink); border-color: var(--brand); }
+
+    /* ── MAIN BODY ── */
+    .body-row {
+      display: grid;
+      grid-template-columns: 1fr;   /* drawer hidden by default */
+      gap: 10px; min-height: 0; overflow: hidden;
+      padding-bottom: 12px;
+    }
+    .body-row.drawer-open { grid-template-columns: 1fr 440px; }
+
+    /* ── TABLE PANEL ── */
+    .table-panel { padding: 0; overflow: hidden; display: flex; flex-direction: column; }
+    .table-head {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 12px 18px; border-bottom: 1px solid var(--line); flex-shrink: 0;
+    }
+    .table-head-title { font-family: "Space Grotesk", sans-serif; font-size: 14px; font-weight: 700; color: var(--ink); }
+    .table-wrap { flex: 1; overflow-y: auto; overflow-x: auto; }
+    .table-wrap::-webkit-scrollbar { width: 5px; height: 5px; }
+    .table-wrap::-webkit-scrollbar-track { background: transparent; }
+    .table-wrap::-webkit-scrollbar-thumb { background: rgba(90,145,210,.28); border-radius: 3px; }
+    .table-wrap::-webkit-scrollbar-thumb:hover { background: rgba(107,160,245,.45); }
+
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    thead { position: sticky; top: 0; z-index: 2; }
+    thead tr { background: var(--surface-2); }
+    th {
+      font-family: "Space Grotesk", sans-serif; font-size: 10px; font-weight: 700;
+      letter-spacing: .09em; text-transform: uppercase; color: var(--muted);
+      padding: 10px 14px; text-align: left; border-bottom: 1px solid var(--line-strong);
+      white-space: nowrap;
+    }
+    td { padding: 11px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+    tbody tr { transition: background .12s; cursor: pointer; }
+    tbody tr:hover td { background: rgba(72,130,230,.09); }
+    tbody tr.selected td { background: rgba(107,160,245,.13); }
+    tbody tr.selected td:first-child { border-left: 3px solid var(--brand-vivid); padding-left: 11px; }
+
+    .td-title strong { font-family: "Noto Sans SC", sans-serif; font-size: 13px; font-weight: 600; color: var(--ink); line-height: 1.45; display: block; margin-bottom: 3px; }
+    .td-title p { font-size: 11.5px; color: var(--muted); line-height: 1.55; margin: 0; }
+    .td-title .no-zh { font-style: italic; color: var(--warn); }
+    .td-src  { color: var(--ink-2); font-size: 12px; white-space: nowrap; }
+    .td-lang { font-family: "JetBrains Mono", monospace; font-size: 11px; color: var(--muted); white-space: nowrap; }
+    .td-xlat { font-family: "JetBrains Mono", monospace; font-size: 11px; white-space: nowrap; }
+    .td-xlat.done   { color: var(--ok); }
+    .td-xlat.native { color: var(--muted); }
+    .td-xlat.pend   { color: var(--warn); }
+    .importance { font-family: "JetBrains Mono", monospace; font-size: 12px; color: var(--warn); letter-spacing: -.04em; }
+    .empty-row td { color: var(--muted); font-size: 13px; text-align: center; padding: 40px; }
+
+    /* ── TAGS ── */
+    .tag {
+      display: inline-flex; align-items: center; padding: 2px 7px; border-radius: 5px;
+      font-family: "Space Grotesk", sans-serif; font-size: 11px; font-weight: 700;
+      letter-spacing: .04em; white-space: nowrap;
+    }
+    .t-blue     { color: var(--brand-vivid); background: var(--brand-soft);        border: 1px solid rgba(107,160,245,.20); }
+    .t-gray     { color: var(--muted);        background: rgba(90,130,170,.12);     border: 1px solid rgba(90,130,170,.18); }
+    .t-warn     { color: var(--warn);         background: var(--warn-soft);          border: 1px solid rgba(251,191,36,.22); }
+    .t-ok       { color: var(--ok);           background: var(--ok-soft);            border: 1px solid rgba(61,216,122,.22); }
+    .t-bad      { color: var(--bad);          background: var(--bad-soft);           border: 1px solid rgba(245,101,101,.22); }
+    .t-policy   { color: #fbbf24; background: rgba(251,191,36,.10);  border:1px solid rgba(251,191,36,.22); }
+    .t-strategic{ color: #60a5fa; background: rgba(96,165,250,.10);  border:1px solid rgba(96,165,250,.22); }
+    .t-tech     { color: #34d399; background: rgba(52,211,153,.10);  border:1px solid rgba(52,211,153,.22); }
+    .t-sales    { color: #a78bfa; background: rgba(167,139,250,.10); border:1px solid rgba(167,139,250,.22); }
+    .t-supply   { color: #fb923c; background: rgba(251,146,60,.10);  border:1px solid rgba(251,146,60,.22); }
+    .t-exec     { color: #94a3b8; background: rgba(148,163,184,.10); border:1px solid rgba(148,163,184,.22); }
+    .t-macro    { color: #e879f9; background: rgba(232,121,249,.10); border:1px solid rgba(232,121,249,.22); }
+    .t-geo      { color: #f87171; background: rgba(248,113,113,.10); border:1px solid rgba(248,113,113,.22); }
+    .t-commodity{ color: #fbbf24; background: rgba(251,191,36,.10);  border:1px solid rgba(251,191,36,.22); }
+    .t-incident { color: #f472b6; background: rgba(244,114,182,.10); border:1px solid rgba(244,114,182,.22); }
+
+    /* ── DETAIL DRAWER ── */
+    .drawer {
+      display: none;   /* hidden until article clicked */
+      flex-direction: column;
+      background: var(--surface); border: 1px solid var(--line);
+      border-radius: var(--radius); backdrop-filter: blur(22px);
+      box-shadow: var(--shadow); overflow: hidden;
+    }
+    .drawer.open { display: flex; }
+
+    .drawer-head {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 12px 16px; border-bottom: 1px solid var(--line); flex-shrink: 0;
+    }
+    .drawer-head-title {
+      font-family: "Space Grotesk", sans-serif; font-size: 12px; font-weight: 700;
+      letter-spacing: .09em; text-transform: uppercase; color: var(--brand-vivid);
+    }
+    .drawer-close {
+      background: var(--surface-2); border: 1px solid var(--line); border-radius: 6px;
+      width: 26px; height: 26px; display: flex; align-items: center; justify-content: center;
+      cursor: pointer; color: var(--muted); font-size: 14px; transition: all .18s;
+    }
+    .drawer-close:hover { color: var(--ink); border-color: var(--brand); }
+
+    .drawer-scroll { flex: 1; overflow-y: auto; padding: 14px 16px; }
+    .drawer-scroll::-webkit-scrollbar { width: 4px; }
+    .drawer-scroll::-webkit-scrollbar-thumb { background: rgba(90,145,210,.30); border-radius: 2px; }
+
+    [hidden] { display: none !important; }
+
+    .d-loading {
+      display: flex; align-items: center; gap: 8px;
+      padding: 20px 0; color: var(--muted); font-size: 13px;
+    }
+    .d-spinner {
+      width: 14px; height: 14px;
+      border: 2px solid var(--line-strong);
+      border-top-color: var(--brand-vivid);
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .d-pills { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 10px; }
+    .d-title { font-family: "Noto Sans SC", sans-serif; font-size: 15px; font-weight: 700; line-height: 1.5; color: var(--ink); margin-bottom: 6px; }
+    .d-meta  { font-family: "JetBrains Mono", monospace; font-size: 10px; color: var(--muted); margin-bottom: 12px; line-height: 1.7; }
+
+    .d-tabs { display: flex; gap: 4px; margin-bottom: 10px; }
+    .d-tab {
+      font-family: "Space Grotesk", sans-serif; font-size: 12px; font-weight: 700;
+      padding: 5px 14px; border-radius: 7px; cursor: pointer;
+      background: var(--surface-2); border: 1px solid var(--line); color: var(--muted);
+      transition: all .18s;
+    }
+    .d-tab.active { color: var(--brand-vivid); background: var(--brand-soft); border-color: rgba(107,160,245,.24); }
+
+    .d-block {
+      background: var(--surface-2); border: 1px solid var(--line);
+      border-radius: var(--radius-sm); padding: 11px 13px; margin-bottom: 8px;
+    }
+    .d-block-label {
+      font-family: "Space Grotesk", sans-serif; font-size: 10px; font-weight: 700;
+      letter-spacing: .10em; text-transform: uppercase; color: var(--muted);
+      margin-bottom: 6px; display: flex; align-items: center; gap: 6px;
+    }
+    .d-block-badge {
+      font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 4px;
+      font-family: "JetBrains Mono", monospace; letter-spacing: .04em;
+    }
+    .d-block-badge.ok   { color: var(--ok);  background: var(--ok-soft); }
+    .d-block-badge.warn { color: var(--warn); background: var(--warn-soft); }
+    .d-block-badge.muted{ color: var(--muted); background: var(--surface-3); }
+    .d-block p {
+      font-family: "Noto Sans SC", sans-serif; font-size: 13px; color: var(--ink-2);
+      line-height: 1.78; white-space: pre-wrap; word-break: break-word;
+    }
+    .d-block p.warn-text { color: var(--warn); font-style: italic; }
+    .d-block p.muted-text { color: var(--muted); font-style: italic; }
+
+    /* AI analysis key-values */
+    .d-kv-list { display: flex; flex-direction: column; gap: 5px; }
+    .d-kv { display: flex; gap: 8px; align-items: flex-start; font-size: 12px; }
+    .d-kv-key {
+      font-family: "JetBrains Mono", monospace; font-size: 10px; font-weight: 600;
+      color: var(--brand-vivid); min-width: 120px; flex-shrink: 0; padding-top: 1px;
+    }
+    .d-kv-val { color: var(--ink-2); line-height: 1.55; word-break: break-word; }
+
+    .d-code {
+      background: rgba(8, 16, 36, 0.75); border: 1px solid var(--line);
+      border-radius: var(--radius-sm); padding: 10px 12px; margin-top: 6px;
+      font-family: "JetBrains Mono", monospace; font-size: 10.5px;
+      color: #8bc4f0; line-height: 1.65; white-space: pre-wrap;
+      word-break: break-word; max-height: 160px; overflow-y: auto;
+    }
+    .d-code::-webkit-scrollbar { width: 3px; }
+    .d-code::-webkit-scrollbar-thumb { background: rgba(90,145,210,.28); border-radius: 2px; }
+
+    .d-tags { display: flex; flex-wrap: wrap; gap: 5px; }
+    .d-actions { margin-top: 10px; padding-bottom: 4px; }
+
+    a { color: var(--brand-vivid); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    @media (max-width: 1100px) {
+      .body-row.drawer-open { grid-template-columns: 1fr; }
+      .drawer { display: none !important; }
+    }
+    @media (max-width: 860px) {
+      .page { height: auto; grid-template-rows: 50px 46px auto 700px; }
+    }
+  </style>
+</head>
+
+{% macro cat(c) %}{% if c == 'policy_regulation' %}t-policy{% elif c == 'strategic_cooperation' %}t-strategic{% elif c == 'technology_breakthrough' %}t-tech{% elif c == 'sales_data' %}t-sales{% elif c == 'supply_chain' %}t-supply{% elif c == 'executive_change' %}t-exec{% elif c == 'macro_policy' %}t-macro{% elif c == 'geopolitics' %}t-geo{% elif c == 'commodities_fx' %}t-commodity{% elif c == 'incident' %}t-incident{% else %}t-gray{% endif %}{% endmacro %}
+
+<body>
+<div class="page">
+
+  <!-- ── NAV ── -->
+  <nav class="nav">
+    <div class="brand">
+      <div class="brand-mark">
+        <span class="brand-mark-y">Y</span>
+        <span class="brand-mark-arrow"></span>
+      </div>
+      <div class="brand-text">
+        <div class="brand-name">YAPP · AUTO INTEL</div>
+        <div class="brand-sub">亚普汽车 · 情报系统</div>
+      </div>
+    </div>
+    <div class="nav-links">
+      <a href="/">今日早报</a>
+      <a class="active" href="/intel">情报池</a>
+      <a href="/ops">采集中心</a>
+    </div>
+    <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);">{{ window_info.window_mode_label }} · {{ window_info.window_start_label }}</span>
+  </nav>
+
+  <!-- ── STATS BAR ── -->
+  <div class="stats-bar">
+    <div class="sb-item">
+      <span class="sb-label">当前视角</span>
+      <span class="sb-val">{{ window_info.window_mode_label }}</span>
+      <span class="sb-desc">{{ window_info.window_start_label }} → {{ window_info.window_end_label }}</span>
+    </div>
+    <div class="sb-item">
+      <span class="sb-label">全部</span>
+      <span class="sb-val">{{ totals.article_count }}</span>
+    </div>
+    <div class="sb-item">
+      <span class="sb-label">候选</span>
+      <span class="sb-val">{{ totals.candidate_count }}</span>
+    </div>
+    <div class="sb-item">
+      <span class="sb-label">重大</span>
+      <span class="sb-val ok">{{ totals.major_count }}</span>
+    </div>
+    <div class="sb-item">
+      <span class="sb-label">外文</span>
+      <span class="sb-val">{{ totals.foreign_count }}</span>
+    </div>
+  </div>
+
+  <!-- ── FILTER BAR ── -->
+  <div class="filter-bar">
+    <form method="get" action="/intel">
+      <div class="filter-inner">
+        <div class="f-group">
+          <span class="f-label">查看范围</span>
+          <select name="window_mode" class="f-select">
+            {% for key, label in window_mode_labels.items() %}
+            <option value="{{ key }}" {% if filters.window_mode == key %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="f-group">
+          <span class="f-label">期次 / 日期</span>
+          <input type="date" name="date" value="{{ filters.date }}" class="f-input">
+        </div>
+        <div class="f-group">
+          <span class="f-label">来源</span>
+          <select name="source_key" class="f-select">
+            <option value="">全部来源</option>
+            {% for item in source_options %}
+            <option value="{{ item.key }}" {% if filters.source_key == item.key %}selected{% endif %}>{{ item.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="f-group">
+          <span class="f-label">事件分类</span>
+          <select name="category" class="f-select">
+            <option value="">全部分类</option>
+            {% for key, label in category_labels.items() %}
+            <option value="{{ key }}" {% if filters.category == key %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="f-group">
+          <span class="f-label">内容完整性</span>
+          <select name="content_access" class="f-select">
+            <option value="">全部</option>
+            {% for key, label in content_access_labels.items() %}
+            <option value="{{ key }}" {% if filters.content_access == key %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="f-group">
+          <span class="f-label">来源语言</span>
+          <select name="language_scope" class="f-select">
+            <option value="all"      {% if filters.language_scope == "all"      %}selected{% endif %}>全部</option>
+            <option value="domestic" {% if filters.language_scope == "domestic" %}selected{% endif %}>中文来源</option>
+            <option value="foreign"  {% if filters.language_scope == "foreign"  %}selected{% endif %}>外文来源</option>
+          </select>
+        </div>
+        <div class="f-group">
+          <span class="f-label">每页</span>
+          <select name="limit" class="f-select" style="min-width:80px;">
+            {% for option in [50, 120, 200, 300] %}
+            <option value="{{ option }}" {% if filters.limit == option %}selected{% endif %}>{{ option }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="f-checks">
+          <label class="f-check">
+            <input type="checkbox" name="candidate_only" value="true" {% if filters.candidate_only %}checked{% endif %}>
+            仅候选
+          </label>
+          <label class="f-check">
+            <input type="checkbox" name="major_only" value="true" {% if filters.major_only %}checked{% endif %}>
+            仅重大
+          </label>
+        </div>
+        <div style="display:flex;gap:8px;align-items:flex-end;">
+          <button type="submit" class="btn-primary">筛选</button>
+          <a href="/intel" class="btn-ghost">重置</a>
+        </div>
+      </div>
+    </form>
+  </div>
+
+  <!-- ── TABLE + DRAWER ── -->
+  <div class="body-row" id="body-row">
+
+    <!-- Table panel -->
+    <div class="panel table-panel">
+      <div class="table-head">
+        <span class="table-head-title">文章列表</span>
+        <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);">共 {{ articles | length }} 条 · 点击任意行查看详情</span>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th style="min-width:280px;">标题 / 摘要</th>
+              <th>来源</th>
+              <th>分类</th>
+              <th>重要度</th>
+              <th>语言</th>
+              <th>翻译</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% if articles %}
+              {% for item in articles %}
+              <tr id="row-{{ item.id }}" class="article-row" data-id="{{ item.id }}">
+                <td class="td-title">
+                  <strong>{{ item.translated_title_zh or item.title }}</strong>
+                  {% set zh_summary = item.translated_summary_zh or item.core_summary %}
+                  {% if zh_summary %}
+                    <p>{{ zh_summary | truncate(120) }}</p>
+                  {% elif item.language != 'zh' %}
+                    <p class="no-zh">待 AI 分析 / 翻译处理</p>
+                  {% elif item.summary_hint %}
+                    <p>{{ item.summary_hint | truncate(120) }}</p>
+                  {% endif %}
+                </td>
+                <td class="td-src">{{ item.source_name }}</td>
+                <td>
+                  <span class="tag {{ cat(item.event_category or item.rule_category) }}">
+                    {{ category_labels.get(item.event_category, category_labels.get(item.rule_category, '未分类')) }}
+                  </span>
+                </td>
+                <td><span class="importance">{% for i in range(item.event_importance or 0) %}★{% endfor %}{% if not item.event_importance %}—{% endif %}</span></td>
+                <td class="td-lang">{% if item.language == 'zh' %}中文{% else %}<span style="color:var(--warn);">{{ item.language }}</span>{% endif %}</td>
+                <td class="td-xlat {% if item.translation_status == 'done' %}done{% elif item.translation_status == 'not_needed' %}native{% else %}pend{% endif %}">
+                  {% if item.translation_status == 'done' %}已译
+                  {% elif item.translation_status == 'not_needed' %}原文
+                  {% elif item.translation_status == 'not_requested' %}未请求
+                  {% elif item.translation_status == 'pending' %}进行中
+                  {% else %}{{ item.translation_status }}{% endif %}
+                </td>
+              </tr>
+              {% endfor %}
+            {% else %}
+              <tr class="empty-row"><td colspan="6">当前筛选条件下没有文章</td></tr>
+            {% endif %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Detail drawer — hidden until article clicked -->
+    <div class="panel drawer" id="drawer">
+      <div class="drawer-head">
+        <span class="drawer-head-title">文章详情</span>
+        <button class="drawer-close" id="drawer-close" type="button" title="关闭">✕</button>
+      </div>
+      <div class="drawer-scroll" id="drawer-scroll">
+        <!-- Loading state -->
+        <div class="d-loading" id="d-loading" hidden>
+          <div class="d-spinner"></div>
+          <span>加载中…</span>
+        </div>
+
+        <!-- Content (shown after load) -->
+        <div id="drawer-content" hidden>
+          <div class="d-pills" id="d-pills"></div>
+          <h2 class="d-title" id="d-title"></h2>
+          <p class="d-meta" id="d-meta"></p>
+
+          <div class="d-tabs">
+            <button class="d-tab active" type="button" data-tab="display">中文解读</button>
+            <button class="d-tab" type="button" data-tab="ai">AI 分析</button>
+            <button class="d-tab" type="button" data-tab="original">原文内容</button>
+          </div>
+
+          <!-- Tab: 中文解读 -->
+          <div id="pane-display">
+            <!-- AI 研判摘要 -->
+            <div class="d-block">
+              <div class="d-block-label">
+                AI 研判摘要
+                <span class="d-block-badge" id="d-summary-badge"></span>
+              </div>
+              <p id="d-core-summary"></p>
+            </div>
+            <!-- 中文译文 / 正文 -->
+            <div class="d-block" id="d-zh-block">
+              <div class="d-block-label" id="d-zh-label">中文正文</div>
+              <p id="d-zh-content"></p>
+            </div>
+            <!-- Tags & Terms -->
+            <div class="d-block">
+              <div class="d-block-label">标签 &amp; 术语</div>
+              <div class="d-tags" id="d-tags"></div>
+            </div>
+          </div>
+
+          <!-- Tab: AI 分析 -->
+          <div id="pane-ai" hidden>
+            <div class="d-block">
+              <div class="d-block-label">事件判定</div>
+              <div class="d-kv-list" id="d-ai-judgment"></div>
+            </div>
+            <div class="d-block">
+              <div class="d-block-label">规则 &amp; 流水线状态</div>
+              <div class="d-code" id="d-pipeline-json"></div>
+            </div>
+          </div>
+
+          <!-- Tab: 原文内容 -->
+          <div id="pane-original" hidden>
+            <div class="d-block">
+              <div class="d-block-label">原文标题</div>
+              <p id="d-orig-title"></p>
+            </div>
+            <div class="d-block">
+              <div class="d-block-label">原文摘要</div>
+              <p id="d-orig-summary"></p>
+            </div>
+            <div class="d-block">
+              <div class="d-block-label">原文正文</div>
+              <p id="d-orig-content" style="max-height:220px;overflow-y:auto;"></p>
+            </div>
+          </div>
+
+          <div class="d-actions">
+            <a class="btn-ghost" id="d-link" href="#" target="_blank" rel="noreferrer">↗ 打开原始链接</a>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /body-row -->
+
+</div><!-- /page -->
+
+<script>
+  const bodyRow       = document.getElementById('body-row');
+  const drawerEl      = document.getElementById('drawer');
+  const drawerContent = document.getElementById('drawer-content');
+  const dLoading      = document.getElementById('d-loading');
+  const paneDisplay   = document.getElementById('pane-display');
+  const paneAI        = document.getElementById('pane-ai');
+  const paneOriginal  = document.getElementById('pane-original');
+
+  function catClass(cat) {
+    const map = {
+      policy_regulation:'t-policy', strategic_cooperation:'t-strategic',
+      technology_breakthrough:'t-tech', sales_data:'t-sales',
+      supply_chain:'t-supply', executive_change:'t-exec',
+      macro_policy:'t-macro', geopolitics:'t-geo',
+      commodities_fx:'t-commodity', incident:'t-incident'
+    };
+    return map[cat] || 't-gray';
+  }
+
+  function setTab(tab) {
+    document.querySelectorAll('.d-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+    paneDisplay.hidden  = (tab !== 'display');
+    paneAI.hidden       = (tab !== 'ai');
+    paneOriginal.hidden = (tab !== 'original');
+  }
+
+  function openDrawer() {
+    drawerEl.classList.add('open');
+    bodyRow.classList.add('drawer-open');
+  }
+
+  function closeDrawer() {
+    drawerEl.classList.remove('open');
+    bodyRow.classList.remove('drawer-open');
+    document.querySelectorAll('.article-row').forEach(r => r.classList.remove('selected'));
+  }
+
+  function setText(id, val, fallback) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.textContent = val || fallback || '';
+    el.className = (el.className || '').replace(/\bwarn-text\b|\bmuted-text\b/g, '').trim();
+    if (!val && fallback) el.classList.add('muted-text');
+  }
+
+  async function loadDetail(id) {
+    openDrawer();
+    drawerContent.hidden = true;
+    dLoading.hidden = false;
+    document.querySelectorAll('.article-row').forEach(r => r.classList.toggle('selected', r.dataset.id === id));
+
+    try {
+      const res = await fetch(`/v1/articles/${id}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const d = await res.json();
+
+      /* ── Title & meta ── */
+      document.getElementById('d-title').textContent = d.display_title || d.title || '（无标题）';
+      const langLabel  = d.original_language === 'zh' ? '中文原文' : `原文语言: ${d.original_language}`;
+      const xlat       = d.translation_status === 'done' ? '已翻译' :
+                         d.translation_status === 'not_needed' ? '无需翻译' : `翻译: ${d.translation_status}`;
+      document.getElementById('d-meta').textContent =
+        `${d.source_name}  ·  ${d.published_at || '无发布时间'}  ·  ${langLabel}  ·  ${xlat}`;
+
+      /* ── Pills ── */
+      const importanceStars = d.event_importance ? '★'.repeat(d.event_importance) : '—';
+      const accessLabel = d.content_access === 'index_only' ? 'Index-only' : '全文';
+      document.getElementById('d-pills').innerHTML = [
+        `<span class="tag ${catClass(d.event_category || d.rule_category)}">${d.event_category || d.rule_category || '未分类'}</span>`,
+        `<span class="tag t-gray">重要度 ${importanceStars}</span>`,
+        `<span class="tag t-gray">${accessLabel}</span>`,
+        d.is_foreign_original ? `<span class="tag t-warn">原文非中文</span>` : `<span class="tag t-gray">中文原文</span>`,
+        d.included_in_today_digest ? `<span class="tag t-ok">已进早报首页</span>` : '',
+      ].join('');
+
+      /* ── Tab: 中文解读 ── */
+      // AI 研判摘要
+      const coreSummary = d.core_summary || d.display_summary;
+      const badge = document.getElementById('d-summary-badge');
+      if (coreSummary) {
+        badge.textContent = 'AI 已分析';
+        badge.className = 'd-block-badge ok';
+        document.getElementById('d-core-summary').textContent = coreSummary;
+        document.getElementById('d-core-summary').className = '';
+      } else {
+        badge.textContent = '待处理';
+        badge.className = 'd-block-badge muted';
+        document.getElementById('d-core-summary').textContent = '（AI 分析尚未运行或结果为空）';
+        document.getElementById('d-core-summary').className = 'muted-text';
+      }
+
+      // 中文正文 / 译文
+      const zhBlock = document.getElementById('d-zh-block');
+      const zhLabel = document.getElementById('d-zh-label');
+      const zhContent = document.getElementById('d-zh-content');
+      if (d.original_language === 'zh') {
+        zhLabel.textContent = '中文正文';
+        zhContent.textContent = d.original_content || d.original_summary || '（无正文内容）';
+        zhContent.className = d.original_content ? '' : 'muted-text';
+      } else if (d.translation_status === 'done') {
+        zhLabel.textContent = '中文译文（已翻译）';
+        zhContent.textContent = d.display_content || d.translated_content_zh || '（译文为空）';
+        zhContent.className = '';
+      } else {
+        zhLabel.textContent = '中文译文';
+        zhContent.textContent = `翻译未完成（当前状态: ${d.translation_status}）— 原文语言: ${d.original_language}`;
+        zhContent.className = 'warn-text';
+      }
+
+      // 标签 & 术语
+      const terms = (d.tags || []).concat(d.preserved_terms || []);
+      document.getElementById('d-tags').innerHTML = terms.length
+        ? terms.map(t => `<span class="tag t-blue">${t}</span>`).join('')
+        : '<span style="color:var(--muted);font-size:12px;">无</span>';
+
+      /* ── Tab: AI 分析 ── */
+      const analysisPayload = d.analysis_payload;
+      const judgmentEl = document.getElementById('d-ai-judgment');
+      const knownKeys = {
+        event_category: '事件分类',
+        event_importance: '重要度',
+        is_major_event: '重大事件',
+        is_candidate: '候选事件',
+        filter_reason: '筛选原因',
+      };
+      let judgmentHtml = '';
+      for (const [k, label] of Object.entries(knownKeys)) {
+        const val = d[k];
+        if (val !== undefined && val !== null) {
+          judgmentHtml += `<div class="d-kv"><span class="d-kv-key">${label}</span><span class="d-kv-val">${val}</span></div>`;
+        }
+      }
+      if (analysisPayload && typeof analysisPayload === 'object' && Object.keys(analysisPayload).length > 0) {
+        for (const [k, v] of Object.entries(analysisPayload)) {
+          if (!knownKeys[k]) {
+            judgmentHtml += `<div class="d-kv"><span class="d-kv-key">${k}</span><span class="d-kv-val">${typeof v === 'object' ? JSON.stringify(v) : v}</span></div>`;
+          }
+        }
+      }
+      judgmentEl.innerHTML = judgmentHtml || '<span style="color:var(--muted);font-size:12px;">LLM 分析结果为空</span>';
+
+      document.getElementById('d-pipeline-json').textContent = JSON.stringify({
+        rule_category: d.rule_category,
+        llm_status: d.llm_status,
+        translation_status: d.translation_status,
+        dedupe_key: d.dedupe_key,
+        included_in_today_digest: d.included_in_today_digest,
+        included_in_latest_report: d.included_in_latest_report,
+      }, null, 2);
+
+      /* ── Tab: 原文内容 ── */
+      setText('d-orig-title',   d.original_title,   '（无原文标题）');
+      setText('d-orig-summary', d.original_summary, '（无原文摘要）');
+      setText('d-orig-content', d.original_content, '（无原文正文）');
+
+      document.getElementById('d-link').href = d.url || '#';
+
+      dLoading.hidden = true;
+      drawerContent.hidden = false;
+      setTab('display');
+
+    } catch (err) {
+      dLoading.hidden = true;
+      drawerContent.hidden = false;
+      document.getElementById('d-title').textContent = '加载失败';
+      document.getElementById('d-meta').textContent  = String(err);
+    }
+  }
+
+  /* ── Event bindings ── */
+  document.querySelectorAll('.article-row').forEach(r =>
+    r.addEventListener('click', () => loadDetail(r.dataset.id))
+  );
+  document.querySelectorAll('.d-tab').forEach(b =>
+    b.addEventListener('click', () => setTab(b.dataset.tab))
+  );
+  document.getElementById('drawer-close').addEventListener('click', closeDrawer);
+
+  /* ── Auto-open from URL hash (linked from dashboard) ── */
+  (function () {
+    const hash = location.hash.slice(1);
+    if (!hash) return;
+    const row = document.querySelector(`.article-row[data-id="${hash}"]`);
+    if (row) {
+      // 文章在当前列表中：滚动到该行再打开
+      setTimeout(() => {
+        row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        loadDetail(hash);
+      }, 120);
+    } else {
+      // 文章不在当前过滤列表（如持续跟踪的前期文章）：直接调 API 打开详情
+      setTimeout(() => loadDetail(hash), 120);
+    }
+  })();
+</script>
+</body>
+</html>
